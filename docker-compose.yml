@@ -1,0 +1,33 @@
+
+version: '2'
+
+services:
+
+  curl:
+    image: appropriate/curl
+    command: curl --retry 999 --retry-max-time 0 http://www.kalender.se:8181
+    links:
+      - kalendermock:www.kalender.se
+    depends_on:
+      - kalendermock
+
+  kalendermock:
+    image: parallel_wiremock
+    command: >
+      parallel -vv --arg-sep=_x_ _x_ 
+      'java -jar /wiremock-standalone.jar --port 8181 --proxy-all http://www.kalender.se'
+      'java -jar /wiremock-standalone.jar --port 8182 --proxy-all http://www.kalender.se'
+    depends_on:
+      - parallel_wiremock
+    volumes:
+      - '.:/home/wiremock'
+    expose:
+      - 8181
+      - 8182
+  
+  parallel_wiremock:
+    build:
+      context: .
+      dockerfile: Dockerfile.wiremock
+    image: parallel_wiremock
+    command: echo ho
