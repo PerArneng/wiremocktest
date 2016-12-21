@@ -1,22 +1,25 @@
-
 version: '2'
 
 services:
 
   curl:
-    image: appropriate/curl
-    command: curl --retry 999 --retry-max-time 0 http://www.kalender.se:8181
+    image: markmark206/alpine-bash-curl-git-python
+    command: > 
+      bash -c "
+        sleep 5 &&
+        curl --retry 999 --retry-max-time 0 --connect-timeout 20 http://www.kalender.se:8182/2017/Januari &&
+        curl --retry 999 --retry-max-time 0 --connect-timeout 20 http://www.kalender.se:8181/2017/Februari"
     links:
-      - kalendermock:www.kalender.se
+      - www_kalender_se_mock:www.kalender.se
     depends_on:
-      - kalendermock
+      - www_kalender_se_mock
 
-  kalendermock:
+  www_kalender_se_mock:
     image: parallel_wiremock
     command: >
-      parallel -vv --arg-sep=_x_ _x_ 
-      'java -jar /wiremock-standalone.jar --port 8181 --proxy-all http://www.kalender.se'
-      'java -jar /wiremock-standalone.jar --port 8182 --proxy-all http://www.kalender.se'
+      parallel -vv --arg-sep=_x_ _x_
+      'bash /docker-entrypoint.sh --record-mappings --root-dir kalender_8181 --port 8181 --proxy-all http://www.kalender.se'
+      'bash /docker-entrypoint.sh --record-mappings --root-dir kalender_8182 --port 8182 --proxy-all http://www.kalender.se'
     depends_on:
       - parallel_wiremock
     volumes:
@@ -24,10 +27,11 @@ services:
     expose:
       - 8181
       - 8182
-  
+
   parallel_wiremock:
     build:
       context: .
       dockerfile: Dockerfile.wiremock
     image: parallel_wiremock
+    user: "${UID}:${GID}"
     command: echo ho
