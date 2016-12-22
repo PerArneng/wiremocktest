@@ -1,0 +1,3 @@
+kalender    | http://www.kalender.se
+kalender2   | http://www.kalender.se:8181
+google      | http://www.google.com
