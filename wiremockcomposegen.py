@@ -2,6 +2,7 @@ import sys
 import urlparse
 import re
 import argparse
+import os
 
 class Service:
 
@@ -16,7 +17,7 @@ class Service:
         if self.port is None:
             self.port = "80"
 
-def gen_container_entry(container_name, service_list, record):
+def gen_container_entry(container_name, service_list, record, output_dir):
     print("""
     %s:
         image: parallel_wiremock
@@ -31,8 +32,8 @@ def gen_container_entry(container_name, service_list, record):
         if 'https' in service.scheme:
             port_option = '--https-port'
 
-        print("            'bash /docker-entrypoint.sh --root-dir %s %s %s%s'" % 
-        (service.service_name, port_option, service.port, record_string))
+        print("            'bash /docker-entrypoint.sh --root-dir %s/%s %s %s%s'" % 
+        (output_dir, service.service_name, port_option, service.port, record_string))
 
     print("""        depends_on:
             - parallel_wiremock
@@ -54,10 +55,10 @@ def gen_links(services):
     for container_name in services:
         print("            - %s" % (container_name))
 
-def gen_mocks(services, record):
+def gen_mocks(services, record, output_dir):
     for container_name in services:
         service_list = services[container_name]
-        gen_container_entry(container_name, service_list, record)
+        gen_container_entry(container_name, service_list, record, output_dir)
 
     print("")
 
@@ -86,14 +87,24 @@ def parse_services(services_file):
     return services
 
 
+def ensure_exists(path_to_file):
+    if not os.path.exists(path_to_file):
+        print("the file or dir does not exist: '{0}'".format(path_to_file))
+        sys.exit(1)
+
 def main(args):
     
     parser = argparse.ArgumentParser(prog='wiremockcomposegen',
                                      usage='%(prog)s [options]', description='a generate for wiremock docker compose files')
     parser.add_argument('-f', '--services-file', required=True ,nargs='?', help='the path to the service list file')
     parser.add_argument('-t', '--template-file', required=True ,nargs='?', help='the template file to use that contains the #<links> and #<mocks>')
+    parser.add_argument('-o', '--output-dir', required=True ,nargs='?', help='the directory that will hold the mock state')
     parser.add_argument('-r', '--record', action='store_true', required=False, help='start wiremock in record mode')
     parsed_args = parser.parse_args()
+
+    ensure_exists(parsed_args.services_file)
+    ensure_exists(parsed_args.template_file)
+    ensure_exists(parsed_args.output_dir)
 
     services = parse_services(parsed_args.services_file)
 
@@ -103,7 +114,7 @@ def main(args):
             if '#<links>' in line:
                 gen_links(services)
             elif '#<mocks>' in line:
-                gen_mocks(services, parsed_args.record)
+                gen_mocks(services, parsed_args.record, parsed_args.output_dir)
             else:
                 sys.stdout.write(line)
 
