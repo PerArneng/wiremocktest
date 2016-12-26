@@ -17,7 +17,7 @@ class Service:
         if self.port is None:
             self.port = "80"
 
-def gen_container_entry(container_name, service_list, record, output_dir):
+def gen_container_entry(container_name, service_list, record, output_dir, user_id):
     print("""
     %s:
         image: parallel_wiremock
@@ -39,7 +39,9 @@ def gen_container_entry(container_name, service_list, record, output_dir):
             - parallel_wiremock
         volumes:
             - '.:/home/wiremock'
-        expose:""")
+        environment:
+            - uid=%s
+        expose:""" % (user_id))
     
     for service in service_list:
         print("            - %s" % service.port)
@@ -55,10 +57,10 @@ def gen_links(services):
     for container_name in services:
         print("            - %s" % (container_name))
 
-def gen_mocks(services, record, output_dir):
+def gen_mocks(services, record, output_dir, user_id):
     for container_name in services:
         service_list = services[container_name]
-        gen_container_entry(container_name, service_list, record, output_dir)
+        gen_container_entry(container_name, service_list, record, output_dir, user_id)
 
     print("")
 
@@ -68,9 +70,10 @@ def gen_mocks(services, record, output_dir):
             context: .
             dockerfile: Dockerfile.wiremock
         image: parallel_wiremock
-        user: "${UID}:${GID}"
+        environment:
+            - uid=%s
         command: echo x
-""")
+""" % (user_id))
 
 def parse_services(services_file):
     services = {}
@@ -99,12 +102,16 @@ def main(args):
     parser.add_argument('-f', '--services-file', required=True ,nargs='?', help='the path to the service list file')
     parser.add_argument('-t', '--template-file', required=True ,nargs='?', help='the template file to use that contains the #<links> and #<mocks>')
     parser.add_argument('-o', '--output-dir', required=True ,nargs='?', help='the directory that will hold the mock state')
+    parser.add_argument('-u', '--user-id', required=False ,nargs='?', help='the uid of the user. default to current users uid')
     parser.add_argument('-r', '--record', action='store_true', required=False, help='start wiremock in record mode')
     parsed_args = parser.parse_args()
 
     ensure_exists(parsed_args.services_file)
     ensure_exists(parsed_args.template_file)
     ensure_exists(parsed_args.output_dir)
+
+    if parsed_args.user_id is None:
+        parsed_args.user_id = os.getuid()
 
     services = parse_services(parsed_args.services_file)
 
@@ -114,7 +121,7 @@ def main(args):
             if '#<links>' in line:
                 gen_links(services)
             elif '#<mocks>' in line:
-                gen_mocks(services, parsed_args.record, parsed_args.output_dir)
+                gen_mocks(services, parsed_args.record, parsed_args.output_dir, parsed_args.user_id)
             else:
                 sys.stdout.write(line)
 
